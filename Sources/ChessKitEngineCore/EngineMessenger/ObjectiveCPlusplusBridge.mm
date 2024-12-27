@@ -1,12 +1,12 @@
 //
-//  EngineMessenger.m
+//  ObjectiveCPlusplusBridge.m
 //  ChessKitEngine
 //
 
-#import "EngineMessenger.h"
+#import "ObjectiveCPlusplusBridge.h"
 #import "../Engines/AvailableEngines.h"
 
-@implementation EngineMessenger : NSObject
+@implementation ObjectiveCPlusplusBridge : NSObject
 
 dispatch_queue_t _queue;
 Engine *_engine;
@@ -16,12 +16,12 @@ NSFileHandle *_pipeReadHandle;
 NSFileHandle *_pipeWriteHandle;
 NSLock *_lock;
 
-/// Initializes a new `EngineMessenger` with default engine `Stockfish`.
+/// Initializes a new `ObjectiveCPlusplusBridge` with default engine `Stockfish`.
 - (id)init {
     return [self initWithEngineType:EngineTypeStockfish];
 }
 
-- (id)initWithEngineType: (EngineType_objc) type {
+- (id)initWithEngineType: (NSInteger) type {
     self = [super init];
 
     if (self) {
@@ -33,6 +33,8 @@ NSLock *_lock;
             case EngineTypeLc0:
                 _engine = new Lc0Engine();
                 break;
+            default:
+                return nil;
         }
     }
 
@@ -42,6 +44,10 @@ NSLock *_lock;
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     _engine->deinitialize();
+}
+
+- (void)initalizeEngine {
+    _engine->initialize();
 }
 
 - (void)start {

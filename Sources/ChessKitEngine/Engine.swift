@@ -3,8 +3,9 @@
 //  ChessKitEngine
 //
 
-import ChessKitEngineCore
+//import ChessKitEngineCore
 import AsyncAlgorithms
+import Foundation
 
 public final class Engine: Sendable {
     
@@ -49,11 +50,6 @@ public final class Engine: Sendable {
     
     /// Messenger used to communicate with engine.
     private let messenger: EngineMessenger
-    
-    private let queue = DispatchQueue(
-        label: "ck-engine-queue",
-        qos: .userInteractive
-    )
         
     //MARK: - Life cycle functions
     
@@ -64,7 +60,7 @@ public final class Engine: Sendable {
     ///   will be logged to the console. The default value is `false`.
     public init(type: EngineType, loggingEnabled: Bool = false) {
         self.type = type
-        self.messenger = EngineMessenger(engineType: type.objc)
+        self.messenger = EngineMessenger(engineType: type)
         self.engineConfigurationActor = EngineConfiguration(loggingEnabled: loggingEnabled)
     }
 
@@ -92,17 +88,21 @@ public final class Engine: Sendable {
     public func start(
         coreCount: Int? = nil,
         multipv: Int = 1
-    ) async {
+    ) async throws {
         await engineConfigurationActor.setAsyncStream()
         
-        setMessengerResponseHandler(coreCount: coreCount, multipv: multipv)
+//        hangleResult(coreCount: coreCount, multipv: multipv)
 
-        await MainActor.run {
-            messenger.start()
+        //Since read in background and notify, requires an active run loop
+        //this is called on main thread to ensure there is an active run loop
+        //to receive the notification on. 
+//        await MainActor.run {
+        for await results in try await messenger.start() {
+            for response in results {
+                handleResult(coreCount: coreCount, multipv: multipv, response: response)
+            }
         }
-
-        // start engine setup loop
-        await send(command: .uci)
+//        }
     }
 
     /// Stops the engine.
@@ -112,12 +112,12 @@ public final class Engine: Sendable {
     /// sending any more commands with ``send(command:)``.
     ///
     /// - note: as temporary fix this function must be called before deiniting the engine.
-    public func stop() async {
+    public func stop() async throws {
         guard await isRunning == true else { return }
             
-        await send(command: .stop)
-        await send(command: .quit)
-        messenger.stop()
+        try await send(command: .stop)
+        try await send(command: .quit)
+        try await messenger.stop()
             
             
         await engineConfigurationActor.clearAsyncStream()
@@ -133,17 +133,15 @@ public final class Engine: Sendable {
     /// validity.
     ///
     /// Any responses will be returned via ``responseStream``.
-    public func send(command: EngineCommand) async {
+    public func send(command: EngineCommand) async throws {
         guard await isRunning || [.uci, .isready].contains(command) else {
             await log("Engine is not running, call start() first.")
-            return
+            throw EngineError.NotRunning
         }
 
         await log(command.rawValue)
         
-        queue.sync {
-            messenger.sendCommand(command.rawValue)
-        }
+        await messenger.sendCommand(command: command)
     }
     
     /// Enable printing logs to console.
@@ -163,16 +161,17 @@ public final class Engine: Sendable {
     /// Logs `message` if `loggingEnabled` is `true`.
     private func log(_ message: String) async {
         if await loggingEnabled {
-            Logging.print(message)
+            print(message)
         }
     }
     
     /// convinience function to set up `messenger.responseHandler`
-    private func setMessengerResponseHandler(
+    private func handleResult(
         coreCount: Int? = nil,
-        multipv: Int = 1
+        multipv: Int = 1,
+        response: String
     ) {
-        messenger.responseHandler = { [weak self] response in
+//        messenger.responseHandler = { [weak self] response in
             Task{ [weak self] in
                 guard let self,
                       let parsed = EngineResponse(rawValue: response) else {
@@ -186,43 +185,42 @@ public final class Engine: Sendable {
                     
                 if await !self.isRunning {
                     if parsed == .readyok {
-                        await self.performInitialSetup(
+                        try await self.performInitialSetup(
                             coreCount: coreCount ?? ProcessInfo.processInfo.processorCount,
                             multipv: multipv
                         )
                     } else if let next = EngineCommand.nextSetupLoopCommand(
                         given: parsed
                     ) {
-                        await self.send(command: next)
+                        try await self.send(command: next)
                     }
                 }
                 await self.engineConfigurationActor.streamContinuation?.yield(parsed)
             }
-        }
+//        }
     }
     
     /// Sets initial engine options.
-    private func performInitialSetup(coreCount: Int, multipv: Int) async {
+    private func performInitialSetup(coreCount: Int, multipv: Int) async throws {
         guard await !engineConfigurationActor.initialSetupComplete else { return }
         
         await engineConfigurationActor.setIsRunning(isRunning: true)
 
         // configure engine-specific options
         for command in type.setupCommands {
-            await send(command: command)
+            try await send(command: command)
         }
 
         // configure common engine options
-        await send(command: .setoption(
+        try await send(command: .setoption(
             id: "Threads",
             value: "\(max(coreCount - 1, 1))"
         ))
-        await send(command: .setoption(id: "MultiPV", value: "\(multipv)"))
+        try await send(command: .setoption(id: "MultiPV", value: "\(multipv)"))
 
         await engineConfigurationActor
             .setInitialSetupComplete(initialSetupComplete:  true)
     }
-
 }
 
 //MARK: EngineConfiguration actor

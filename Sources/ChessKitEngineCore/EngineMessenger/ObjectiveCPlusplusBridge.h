@@ -1,5 +1,5 @@
 //
-//  EngineMessenger.h
+//  ObjectiveCPlusplusBridge.h
 //  ChessKit
 //
 
@@ -9,13 +9,13 @@
 #import <Foundation/Foundation.h>
 #import "../Engines/EngineType_objc.h"
 
-@class EngineMessenger;
+@class ObjectiveCPlusplusBridge;
 
 # pragma mark - EngineMessenger
 
 /// Messenger to communicate with the specified chess engine.
 NS_SWIFT_SENDABLE
-@interface EngineMessenger : NSObject
+@interface ObjectiveCPlusplusBridge : NSObject
 
 /// Called whenever a response is received from the engine.
 ///
@@ -33,7 +33,9 @@ NS_SWIFT_SENDABLE
 /// For possible types, see `EngineType`. The default type
 /// is `EngineTypeStockfish`.
 ///
-- (id _Nonnull)initWithEngineType: (EngineType_objc) type;
+- (id _Nonnull)initWithEngineType: (NSInteger) type;
+
+- (void)initalizeEngine;
 
 /// Opens communicatation channel with the registered engine.
 ///
