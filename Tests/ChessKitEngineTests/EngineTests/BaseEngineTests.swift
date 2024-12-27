@@ -23,6 +23,7 @@ import XCTest
 /// }
 /// ```
 ///
+@TestsActor
 class BaseEngineTests: XCTestCase {
     
     override class var defaultTestSuite: XCTestSuite {
@@ -35,8 +36,8 @@ class BaseEngineTests: XCTestCase {
     }
     
     /// The engine type to test.
-    var engineType: EngineType!
-    var engine: Engine!
+    nonisolated(unsafe) var engineType: EngineType!
+    nonisolated(unsafe) var engine: Engine!
     
     override func setUp() {
         super.setUp()
@@ -46,10 +47,12 @@ class BaseEngineTests: XCTestCase {
     override func tearDown() async throws {
         await engine.stop()
         engine = nil
-        try? await super.tearDown()
     }
     
     func testEngineSetup() async {
+        XCTAssert(!Thread.isMainThread, "Test must be run on a background thread")
+        XCTAssertNotNil(self.engine, "Failed to initialize engine")
+
         let expectation = self.expectation(
             description: "Expect engine \(engine.type.name) to start up."
         )
@@ -59,9 +62,10 @@ class BaseEngineTests: XCTestCase {
             return
         }
         
-        engine.start()
         
         Task{
+            await startEngine(expectation: expectation)
+            
             for await response in await engine.responseStream! {
                 if case let .id(id) = response,
                    case let .name(name) = id {
@@ -81,40 +85,86 @@ class BaseEngineTests: XCTestCase {
     }
     
     func testEngineStop() async {
+        XCTAssert(!Thread.isMainThread, "Test must be run on a background thread")
+        XCTAssertNotNil(self.engine, "Failed to initialize engine")
+        
         let expectationStartEngine = self.expectation(
             description: "Expect engine \(engine.type.name) to start up."
         )
+        let expectationStopEngine = self.expectation(
+            description: "Expect engine \(engine.type.name) to stop gracefully."
+        )
+        
+        Task{
+            await startEngine(expectation: expectationStartEngine)
+            
+            await stopEngine(expectation: expectationStopEngine)
+        }
+        
+        await fulfillment(of: [expectationStartEngine, expectationStopEngine], timeout: 5)
+    }
+    
+    func testEngineRestart() async {
+        XCTAssert(!Thread.isMainThread, "Test must be run on a background thread")
+        XCTAssertNotNil(self.engine, "Failed to initialize engine")
+
+        let expectationStartEngine = self.expectation(
+            description: "Expect engine \(engine.type.name) to start up."
+        )
+        expectationStartEngine.expectedFulfillmentCount = 2
         
         let expectationStopEngine = self.expectation(
             description: "Expect engine \(engine.type.name) to stop gracefully."
         )
         
-        guard let engine = self.engine else {
-            XCTFail("Engine is nil")
-            return
-        }
-        
-        engine.start()
-        
         Task{
-            for await response in await engine.responseStream! {
-                let isRunning = await engine.isRunning
-                
-                if response == .readyok &&
-                    isRunning {
-                    expectationStartEngine.fulfill()
-                    break
-                }
-            }
+            await startEngine(expectation: expectationStartEngine)
             
-            await engine.stop()
+            await stopEngine(expectation: expectationStopEngine)
             
-            if await !engine.isRunning,
-               await engine.responseStream == nil {
-                expectationStopEngine.fulfill()
-            }
+            await startEngine(expectation: expectationStartEngine)
         }
         
         await fulfillment(of: [expectationStartEngine, expectationStopEngine], timeout: 5)
     }
+    
+    
+    private func stopEngine(expectation: XCTestExpectation) async {
+        await engine.stop()
+        
+        if await !engine.isRunning,
+           await engine.responseStream == nil {
+            expectation.fulfill()
+        }
+    }
+    
+    private func startEngine(expectation: XCTestExpectation) async {
+        await engine.start()
+        
+        for await response in await engine.responseStream! {
+            if case let .id(id) = response,
+               case let .name(name) = id {
+                let version = engine.type.version
+                XCTAssertTrue(name.contains(version))
+            }
+            
+            let isRunning = await engine.isRunning
+            
+            if response == .readyok &&
+                isRunning {
+                expectation.fulfill()
+                break
+            }
+        }
+    }
+}
+
+//This actor's purpose is to ensure tests for the engine
+//class aren't running on main thread.
+//Since start function now uses MainActor.run which is virtually the
+//same thing as main thread to execute, testing on main thread is
+//counter productive.
+@globalActor
+actor TestsActor: GlobalActor {
+    static var shared = TestsActor()
 }

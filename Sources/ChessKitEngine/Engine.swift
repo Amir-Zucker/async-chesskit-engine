@@ -92,19 +92,17 @@ public final class Engine: Sendable {
     public func start(
         coreCount: Int? = nil,
         multipv: Int = 1
-    ) {
-        Task {
-            await engineConfigurationActor.setAsyncStream()
-            
-            setMessengerResponseHandler(coreCount: coreCount, multipv: multipv)
+    ) async {
+        await engineConfigurationActor.setAsyncStream()
+        
+        setMessengerResponseHandler(coreCount: coreCount, multipv: multipv)
 
-            await MainActor.run {
-                messenger.start()
-            }
-
-            // start engine setup loop
-            await send(command: .uci)
+        await MainActor.run {
+            messenger.start()
         }
+
+        // start engine setup loop
+        await send(command: .uci)
     }
 
     /// Stops the engine.
