@@ -6,6 +6,7 @@
 //
 
 import ChessKitEngineCore
+import Combine
 
 protocol EngineMessengerDelegate: Sendable {
     func engineMessengerDidReceiveResponse(_ response: String)
@@ -20,6 +21,7 @@ internal final class EngineMessenger: @unchecked Sendable {
     private var pipeWriteHandle: FileHandle?
     private var isRunning: Bool = false
     private var delegate: EngineMessengerDelegate?
+    private var cancellables: [AnyCancellable] = []
     
     init(engineType: EngineType) {
         self.objcppBridge = ObjectiveCPlusplusBridge(engineType: engineType.rawValue)

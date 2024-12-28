@@ -49,7 +49,7 @@ class BaseEngineTests: XCTestCase {
         engine = nil
     }
     
-    func testEngineSetup() async {
+    func testEngineStart() async {
         XCTAssert(!Thread.isMainThread, "Test must be run on a background thread")
         XCTAssertNotNil(self.engine, "Failed to initialize engine")
 
