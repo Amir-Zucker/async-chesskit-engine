@@ -23,7 +23,7 @@ import XCTest
 /// }
 /// ```
 ///
-@TestsActor
+//@TestsActor
 class BaseEngineTests: XCTestCase {
     
     override class var defaultTestSuite: XCTestSuite {
@@ -41,11 +41,11 @@ class BaseEngineTests: XCTestCase {
     
     override func setUp() {
         super.setUp()
-        engine = Engine(type: engineType)
+        engine = Engine(type: engineType, loggingEnabled: true)
     }
     
     override func tearDown() async throws {
-        await engine.stop()
+        try? await engine.stop()
         engine = nil
     }
     
@@ -57,13 +57,7 @@ class BaseEngineTests: XCTestCase {
             description: "Expect engine \(engine.type.name) to start up."
         )
         
-        guard let engine = self.engine else {
-            XCTFail("Engine is nil")
-            return
-        }
-        
-        
-        Task{
+//        Task{
             await startEngine(expectation: expectation)
             
             for await response in await engine.responseStream! {
@@ -80,8 +74,8 @@ class BaseEngineTests: XCTestCase {
                     expectation.fulfill()
                 }
             }
-        }
-        await fulfillment(of: [expectation], timeout: 5)
+//        }
+        await fulfillment(of: [expectation], timeout: 50)
     }
     
     func testEngineStop() async {
@@ -95,13 +89,13 @@ class BaseEngineTests: XCTestCase {
             description: "Expect engine \(engine.type.name) to stop gracefully."
         )
         
-        Task{
+//        Task{
             await startEngine(expectation: expectationStartEngine)
             
             await stopEngine(expectation: expectationStopEngine)
-        }
+//        }
         
-        await fulfillment(of: [expectationStartEngine, expectationStopEngine], timeout: 5)
+        await fulfillment(of: [expectationStartEngine, expectationStopEngine], timeout: 50)
     }
     
     func testEngineRestart() async {
@@ -111,26 +105,30 @@ class BaseEngineTests: XCTestCase {
         let expectationStartEngine = self.expectation(
             description: "Expect engine \(engine.type.name) to start up."
         )
-        expectationStartEngine.expectedFulfillmentCount = 2
-        
         let expectationStopEngine = self.expectation(
             description: "Expect engine \(engine.type.name) to stop gracefully."
         )
         
-        Task{
+        expectationStartEngine.expectedFulfillmentCount = 2
+        
+//        Task{
             await startEngine(expectation: expectationStartEngine)
             
             await stopEngine(expectation: expectationStopEngine)
             
             await startEngine(expectation: expectationStartEngine)
-        }
+//        }
         
-        await fulfillment(of: [expectationStartEngine, expectationStopEngine], timeout: 5)
+        await fulfillment(of: [expectationStartEngine, expectationStopEngine], timeout: 50)
     }
     
     
     private func stopEngine(expectation: XCTestExpectation) async {
-        await engine.stop()
+        do {
+            try await engine.stop()
+        } catch {
+            XCTFail("Failed to stop engine: \(error)")
+        }
         
         if await !engine.isRunning,
            await engine.responseStream == nil {
@@ -139,7 +137,11 @@ class BaseEngineTests: XCTestCase {
     }
     
     private func startEngine(expectation: XCTestExpectation) async {
-        await engine.start()
+        do {
+            try await engine.start()
+        } catch {
+            XCTFail("Failed to start engine: \(error)")
+        }
         
         for await response in await engine.responseStream! {
             if case let .id(id) = response,

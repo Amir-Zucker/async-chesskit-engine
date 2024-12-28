@@ -7,43 +7,51 @@
 
 import ChessKitEngineCore
 
-internal actor EngineMessenger {
+protocol EngineMessengerDelegate: Sendable {
+    func engineMessengerDidReceiveResponse(_ response: String)
+}
+
+internal final class EngineMessenger: @unchecked Sendable {
     private let objcppBridge: ObjectiveCPlusplusBridge
-//    private let configuration: EngineConfiguration
     private var queue: dispatch_queue_t?
     private var readPipe: Pipe?
     private var writePipe: Pipe?
     private var pipeReadHandle: FileHandle?
     private var pipeWriteHandle: FileHandle?
     private var isRunning: Bool = false
+    private var delegate: EngineMessengerDelegate?
     
     init(engineType: EngineType) {
-        objcppBridge = ObjectiveCPlusplusBridge(engineType: engineType.rawValue)
+        self.objcppBridge = ObjectiveCPlusplusBridge(engineType: engineType.rawValue)
     }
     
-    nonisolated func start() async throws -> AsyncCompactMapSequence<NotificationCenter.Notifications, [String]> {
-        guard await !isRunning else { throw EngineError.AlreadyStarted }
-        await setIsRunning(isRunning: true)
+    func start(delegate: EngineMessengerDelegate) async throws {
+        guard !isRunning else { throw EngineError.AlreadyStarted }
+        isRunning = true
+        self.delegate = delegate
 
-        await setReadPipe()
-        await setWritePipe()
+        readPipe = Pipe()
+        pipeReadHandle = readPipe?.fileHandleForReading
+        dup2(readPipe?.fileHandleForWriting.fileDescriptor ?? 0, fileno(stdout))
         
-        let notifications = await NotificationCenter.default.notifications(named: FileHandle.readCompletionNotification, object: pipeReadHandle)
-        
-        await queue?.async { [weak self] in
-            self?.objcppBridge.initalizeEngine()
+        await MainActor.run {
+            pipeReadHandle?.readInBackgroundAndNotify()
         }
         
-        // start engine setup loop
-        await sendCommand(command: .uci)
+        NotificationCenter.default.publisher(for: FileHandle.readCompletionNotification, object: pipeReadHandle).sink { [weak self] notification in
+            self?.readStdout(notification: notification)
+        }.store(in: &cancellables)
+                
         
-        return notifications.compactMap({ notification in
-            Task {[weak self] in
-                await self?.pipeReadHandle?.readInBackgroundAndNotify()
-            }
-            
-            return self.readStdout(notification: notification)
-        })
+        writePipe = Pipe()
+        pipeWriteHandle = writePipe?.fileHandleForWriting
+        dup2(writePipe?.fileHandleForReading.fileDescriptor ?? 0, fileno(stdin))
+
+        queue = DispatchQueue(label: "ck-message-queue", attributes: .concurrent)
+        
+        queue?.async { [weak self] in
+            self?.objcppBridge.initalizeEngine()
+        }
     }
     
     func stop() throws {
@@ -61,46 +69,30 @@ internal actor EngineMessenger {
     }
     
     func sendCommand(command: EngineCommand) {
-        guard let pipeWriteHandle else { return }
-        
         let commandString = command.rawValue + "\n"
 
         _ = queue?.sync {
-            let result = write(pipeWriteHandle.fileDescriptor, commandString, strlen(commandString))
+            let result = write(pipeWriteHandle!.fileDescriptor, commandString, strlen(commandString))
             
             //TODO: remove
             print("result: \(result)")
         }
     }
     
-    private func setIsRunning(isRunning: Bool) {
-        self.isRunning = isRunning
-    }
-    
-    private func setWritePipe() {
-        writePipe = Pipe()
-        pipeWriteHandle = writePipe?.fileHandleForWriting
-        dup2(writePipe?.fileHandleForReading.fileDescriptor ?? 0, fileno(stdin))
-    }
-    
-    private func setReadPipe() {
-        readPipe = Pipe()
-        pipeReadHandle = readPipe?.fileHandleForReading
-        dup2(readPipe?.fileHandleForWriting.fileDescriptor ?? 0, fileno(stdout))
-        
-        pipeReadHandle?.readInBackgroundAndNotify()
-    }
-    
-    private func setqueue() {
-        queue = DispatchQueue(label: "ck-message-queue", attributes: .concurrent)
-    }
-    
-    private nonisolated func readStdout(notification: Notification) -> [String] {
+    private nonisolated func readStdout(notification: Notification) {
+//        Task {
+            pipeReadHandle?.readInBackgroundAndNotify()
+//        }
+            
         guard let data = notification.userInfo?[NSFileHandleNotificationDataItem] as? Data,
-            let output = String(data: data, encoding: .utf8)?.components(separatedBy: "\n") else {
-            return []
+              let output = String(data: data, encoding: .utf8)?.components(separatedBy: "\n") else {
+            return
         }
         
-        return output
+        for response in output {
+//            Task {
+                delegate?.engineMessengerDidReceiveResponse(response)
+//            }
+        }
     }
 }

@@ -90,19 +90,19 @@ public final class Engine: Sendable {
         multipv: Int = 1
     ) async throws {
         await engineConfigurationActor.setAsyncStream()
-        
-//        hangleResult(coreCount: coreCount, multipv: multipv)
+        await engineConfigurationActor.setMultiPv(multiPv: multipv)
+        await engineConfigurationActor.setCoreCount(coreCount: coreCount)
+//        setMessengerResponseHandler(coreCount: coreCount, multipv: multipv)
 
         //Since read in background and notify, requires an active run loop
         //this is called on main thread to ensure there is an active run loop
         //to receive the notification on. 
 //        await MainActor.run {
-        for await results in try await messenger.start() {
-            for response in results {
-                handleResult(coreCount: coreCount, multipv: multipv, response: response)
-            }
-        }
+        try await messenger.start(delegate: self)
 //        }
+
+        // start engine setup loop
+        try await send(command: .uci)
     }
 
     /// Stops the engine.
@@ -166,38 +166,32 @@ public final class Engine: Sendable {
     }
     
     /// convinience function to set up `messenger.responseHandler`
-    private func handleResult(
-        coreCount: Int? = nil,
-        multipv: Int = 1,
-        response: String
-    ) {
-//        messenger.responseHandler = { [weak self] response in
-            Task{ [weak self] in
-                guard let self,
-                      let parsed = EngineResponse(rawValue: response) else {
-                    if !response.isEmpty {
-                        await self?.log(response)
-                    }
-                    return
+    private func handleServerResponse(response: String) {
+        Task{ [weak self] in
+            guard let self,
+                  let parsed = EngineResponse(rawValue: response) else {
+                if !response.isEmpty {
+                    await self?.log(response)
                 }
-                    
-                await self.log(parsed.rawValue)
-                    
-                if await !self.isRunning {
-                    if parsed == .readyok {
-                        try await self.performInitialSetup(
-                            coreCount: coreCount ?? ProcessInfo.processInfo.processorCount,
-                            multipv: multipv
-                        )
-                    } else if let next = EngineCommand.nextSetupLoopCommand(
-                        given: parsed
-                    ) {
-                        try await self.send(command: next)
-                    }
-                }
-                await self.engineConfigurationActor.streamContinuation?.yield(parsed)
+                return
             }
-//        }
+                
+            await self.log(parsed.rawValue)
+                
+            if await !self.isRunning {
+                if parsed == .readyok {
+                    try? await self.performInitialSetup(
+                        coreCount: engineConfigurationActor.coreCount,
+                        multipv: engineConfigurationActor.multiPv
+                    )
+                } else if let next = EngineCommand.nextSetupLoopCommand(
+                    given: parsed
+                ) {
+                    try? await self.send(command: next)
+                }
+            }
+            await self.engineConfigurationActor.streamContinuation?.yield(parsed)
+        }
     }
     
     /// Sets initial engine options.
@@ -223,6 +217,12 @@ public final class Engine: Sendable {
     }
 }
 
+extension Engine: EngineMessengerDelegate {
+    func engineMessengerDidReceiveResponse(_ response: String) {
+        handleServerResponse(response: response)
+    }
+}
+
 //MARK: EngineConfiguration actor
 
 //An actor to hold the configuration for the engine class.
@@ -245,6 +245,9 @@ fileprivate actor EngineConfiguration: Sendable {
     /// A reference to AsyncStream's continuation for later access by `EngineMessenger.responseHandler`
     private(set) var streamContinuation: AsyncStream<EngineResponse>.Continuation?
     
+    private(set) var multiPv: Int = 1
+    private(set) var coreCount: Int = ProcessInfo.processInfo.processorCount
+    
     init(loggingEnabled: Bool = false) {
         self.loggingEnabled = loggingEnabled
         
@@ -261,6 +264,16 @@ fileprivate actor EngineConfiguration: Sendable {
     
     func setIsRunning(isRunning: Bool) async {
         self.isRunning = isRunning
+    }
+    
+    func setMultiPv(multiPv: Int) async {
+        self.multiPv = multiPv
+    }
+    
+    func setCoreCount(coreCount: Int?) async {
+        if let coreCount {
+            self.coreCount = coreCount
+        }
     }
     
     func setAsyncStream() async {
