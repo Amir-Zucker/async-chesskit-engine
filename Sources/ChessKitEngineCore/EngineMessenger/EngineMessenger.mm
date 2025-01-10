@@ -33,6 +33,9 @@ NSLock *_lock;
             case EngineTypeLc0:
                 _engine = new Lc0Engine();
                 break;
+            case EngineTypeArasan:
+                _engine = new ArasanEngine();
+                break;
         }
     }
 
