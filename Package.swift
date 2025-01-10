@@ -46,7 +46,7 @@ let package = Package(
                 .define("_64BIT"),
                 .define("USE_INTRINSICS"),
                 .define("USE_ASM"),
-                .define("SYZYGY_TBS"),
+//                .define("SYZYGY_TBS"),
                 .define("SMP"),
                 .define("SMP_STATS"),
 
