@@ -1,0 +1,49 @@
+# Arasan runtime configuration file
+#
+# True to store all games played to a file (in PGN format). Not supported
+# under UCI.
+store_games=true
+#
+# If set, game_pathname is the full path to the file in which games
+# are stored. If not set, games are stored to "games.pgn" in the
+# same directory where arasanx is located. Note: under Linux, the
+# directory must have write permission.
+#game_pathname=
+#
+# Set this option false to disable the opening book
+book.book_enabled=true
+#
+# Opening book variety (0-100).
+# Higher values produce more variety in book move selection.
+book.variety=100
+#
+# Learning
+#
+# True to enable storage & use of position values, false to disable
+learning.position_learning=false
+#
+# Search parameters
+#
+# True to allow computer to resign, false if you want it to never resign.
+# Note: under UCI the GUI is in charge of this.
+search.can_resign=true
+#
+# Resignation threshold (units of 1 pawn=100)
+search.resign_threshold=-500
+#
+# Hash table size in bytes (can be overridden with -H)
+# Can use: K for kilobytes, M for megabytes, G for gigabytes.
+search.hash_table_size=64M
+#
+# Max threads to use during search
+# Can be overridden with -c command-line option.
+search.ncpus=1
+#
+# Location of the NNUE network file. If no path, this is
+# relative to the HOME environment variable
+# NOTE: if you are using this framework as a submodule of
+# Async-Chesskit-Engine, do not change this parameter,
+# the framework uses that name to copy the nnue file
+# from the app bundle to the HOME environment variable
+# path where the engine can find it.
+search.nnueFile=arasan.nnue

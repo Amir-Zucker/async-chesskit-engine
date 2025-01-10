@@ -41,7 +41,7 @@ class BaseEngineTests: XCTestCase {
     
     override func setUp() {
         super.setUp()
-        engine = Engine(type: engineType)
+        engine = Engine(type: engineType, loggingEnabled: true)
     }
     
     override func tearDown() async throws {
