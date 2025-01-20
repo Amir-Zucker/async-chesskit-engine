@@ -123,4 +123,7 @@ package.targets.first { $0.name == "ChessKitEngineCore" }?.exclude = [
     "Engines/Arasan/src/nnue/util",
     "Engines/Arasan/src/bitbase.cpp",
     "Engines/Arasan/src/arasanx.cpp",
+    "Engines/Arasan/network",
+    "Engines/Arasan/book",
+    "Engines/Arasan/doc",
 ]

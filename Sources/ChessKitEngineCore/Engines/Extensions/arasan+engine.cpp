@@ -27,8 +27,6 @@ void ArasanEngine::initialize() {
     std::cout.rdbuf()->pubsetbuf(NULL, 0);
     std::cin.rdbuf()->pubsetbuf(NULL, 0);
     
-    copyBundleFiles();
-    
     Bitboard::init();
     Board::init();
     globals::initOptions();
@@ -46,7 +44,7 @@ void ArasanEngine::initialize() {
     auto result = getrlimit(RLIMIT_STACK, &rl);
     if (result == 0)
     {
-        if (rl.rlim_cur < STACK_MAX && rl.rlim_max <= STACK_MAX)
+        if (rl.rlim_cur < STACK_MAX && rl.rlim_max >= STACK_MAX)
         {
             rl.rlim_cur = STACK_MAX;
             result = setrlimit(RLIMIT_STACK, &rl);
@@ -74,58 +72,3 @@ void ArasanEngine::deinitialize() {
     globals::polling_terminated = true;
     globals::cleanupGlobals();
 }
-
-//Copy the nnue, rc (config) and openning book from the resource bundle.
-void ArasanEngine::copyBundleFiles() {
-    copyBundleFile(CFSTR("arasan"), CFSTR("nnue"));
-    copyBundleFile(CFSTR("arasan"), CFSTR("rc"));
-    copyBundleFile(CFSTR("book"), CFSTR("bin"));
-}
-
-//Copy the file to the HOME directory for arasan to find them.
-void ArasanEngine::copyBundleFile(CFStringRef fileName, CFStringRef fileExtenstion) {
-    std::string cFileName = CFStringGetCStringPtr(fileName, kCFStringEncodingUTF8);
-    std::string cFileExtension = CFStringGetCStringPtr(fileExtenstion, kCFStringEncodingUTF8);
-    std::filesystem::path targetFolder = getenv("HOME");
-    std::filesystem::path sourceFile;
-    
-    //Check if we are running on xctests env therefore mainBundle is com.apple.dt.xctest.tool which does not contain our resource bundle.
-    if (getenv("XCTestBundlePath") != nullptr) {
-        std::string env = getenv("XCTestBundlePath");
-        std::string bundlePath;
-        
-        for (const auto & entry : std::filesystem::directory_iterator(env)) {
-            if (entry.path().extension() == ".bundle") {
-                sourceFile = entry.path().string() + "/" + cFileName + "." + cFileExtension;
-            }
-        }
-    } else {
-        CFBundleRef mainBundle = CFBundleGetMainBundle();
-        CFURLRef fileUrlRef = CFBundleCopyResourceURL(mainBundle, fileName, fileExtenstion, NULL);
-        
-        if (fileUrlRef != nullptr) {
-            CFStringRef fileStringRef = CFURLGetString(fileUrlRef);
-            std::string temp = CFStringGetCStringPtr(fileStringRef, kCFStringEncodingUTF8);
-            std::string replace = "file://";
-            
-            sourceFile =  temp.replace(0, replace.size(), "");
-            
-            CFRelease(fileUrlRef);
-        }
-    }
-    
-    if (!sourceFile.empty()) {
-        auto target = targetFolder / sourceFile.filename();
-        
-        try
-        {
-            std::filesystem::copy_file(sourceFile, target, std::filesystem::copy_options::overwrite_existing);
-        }
-        catch (std::exception& e)
-        {
-            std::cout << e.what();
-        }
-    }
-}
-
-
