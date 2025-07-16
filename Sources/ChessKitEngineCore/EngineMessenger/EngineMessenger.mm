@@ -86,8 +86,8 @@ NSLock *_lock;
 
 - (void)stop {
     [_lock lock];
-    [_pipeReadHandle closeFile];
     [_pipeWriteHandle closeFile];
+    [_pipeReadHandle closeFile];
 
     _readPipe = NULL;
     _pipeReadHandle = NULL;
