@@ -31,7 +31,6 @@ void ArasanEngine::initialize() {
     Board::init();
     globals::initOptions();
     Attacks::init();
-    Scoring::init();
     Search::init();
     if (!globals::initGlobals()) {
         std::cerr << "failed to init arasan chess engine" << std::endl;
