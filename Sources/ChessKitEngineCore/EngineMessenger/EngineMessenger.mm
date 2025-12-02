@@ -1,10 +1,11 @@
 //
-//  EngineMessenger.m
-//  ChessKitEngine
-//
+ //  EngineMessenger.m
+ //  ChessKitEngine
+ //
 
 #import "EngineMessenger.h"
 #import "../Engines/AvailableEngines.h"
+#include <signal.h>
 
 @implementation EngineMessenger : NSObject
 
@@ -23,8 +24,8 @@ NSLock *_lock;
 
 - (id)initWithEngineType: (EngineType_objc) type {
     self = [super init];
-
     if (self) {
+        signal(SIGPIPE, SIG_IGN);
         _lock = [[NSLock alloc] init];
         switch (type) {
             case EngineTypeStockfish:
@@ -86,23 +87,53 @@ NSLock *_lock;
 
 - (void)stop {
     [_lock lock];
-    [_pipeWriteHandle closeFile];
-    [_pipeReadHandle closeFile];
 
-    _readPipe = NULL;
-    _pipeReadHandle = NULL;
+    // Remove read notifications before closing any handles
+    if (_pipeReadHandle) {
+        [[NSNotificationCenter defaultCenter] removeObserver:self name:NSFileHandleReadCompletionNotification object:_pipeReadHandle];
+    }
 
-    _writePipe = NULL;
-    _pipeWriteHandle = NULL;
+    // Close write side first to signal EOF to the reader and avoid further writes
+    if (_pipeWriteHandle) {
+        @try {
+            [_pipeWriteHandle closeAndReturnError:nil];
+        } @catch (NSException *exception) {
+            NSLog([exception description]);
+        }
+    }
 
-    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    _pipeWriteHandle = nil;
+    _writePipe = nil;
+
+    // Close read side
+    if (_pipeReadHandle) {
+        @try {
+            [_pipeReadHandle closeAndReturnError:nil];
+        } @catch (NSException *exception) {
+            NSLog([exception description]);
+        }
+    }
+
+    _pipeReadHandle = nil;
+    _readPipe = nil;
+
     [_lock unlock];
 }
 
 - (void)sendCommand: (NSString*) command {
     dispatch_sync(_queue, ^{
-        const char *cmd = [[command stringByAppendingString:@"\n"] UTF8String];
-        write([_pipeWriteHandle fileDescriptor], cmd, strlen(cmd));
+        if (!_pipeWriteHandle) { return; }
+        NSString *line = [command stringByAppendingString:@"\n"];
+        NSData *data = [line dataUsingEncoding:NSUTF8StringEncoding];
+        
+        if (!data) { return; }
+        
+        ssize_t fd = [_pipeWriteHandle fileDescriptor];
+        
+        if (fd < 0) { return; }
+
+        ssize_t result = write(fd, [data bytes], [data length]);
+        (void)result;
     });
 }
 
