@@ -35,7 +35,7 @@ public enum EngineType: Int, Sendable {
         switch self {
         case .stockfish: "17"
         case .lc0:       "0.31.1"
-        case .arasan:    "25.0"
+        case .arasan:    "25.4"
         }
     }
 
