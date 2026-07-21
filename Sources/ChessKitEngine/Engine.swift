@@ -183,14 +183,14 @@ public final class Engine: Sendable {
                     
                 if await !self.isRunning {
                     if parsed == .readyok {
-                        try await self.performInitialSetup(
+                        try? await self.performInitialSetup(
                             coreCount: coreCount ?? (ProcessInfo.processInfo.activeProcessorCount - 1),
                             multipv: multipv
                         )
                     } else if let next = EngineCommand.nextSetupLoopCommand(
                         given: parsed
                     ) {
-                        try await self.send(command: next)
+                        try? await self.send(command: next)
                     }
                 }
                 await self.engineConfigurationActor.sendValue(parsed)

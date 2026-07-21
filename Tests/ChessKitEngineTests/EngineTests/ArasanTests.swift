@@ -15,7 +15,7 @@ final class ArasanTests: BaseEngineTests {
     }
     
     
-    override func testEngineRestart() async {
+    override func testEngineRestart() async throws {
         XCTAssert(!Thread.isMainThread, "Test must be run on a background thread")
         XCTAssertNotNil(self.engine, "Failed to initialize engine")
 
@@ -28,11 +28,11 @@ final class ArasanTests: BaseEngineTests {
         
         expectationStartEngine.expectedFulfillmentCount = 2
         
-        await startEngine(expectation: expectationStartEngine)
-        try? await Task.sleep(for: .seconds(1))
-        await stopEngine(expectation: expectationStopEngine)
-        try? await Task.sleep(for: .seconds(1))
-        await startEngine(expectation: expectationStartEngine)
+        try await startEngine(expectation: expectationStartEngine)
+        try await Task.sleep(for: .seconds(1))
+        try await stopEngine(expectation: expectationStopEngine)
+        try await Task.sleep(for: .seconds(1))
+        try await startEngine(expectation: expectationStartEngine)
         
         await fulfillment(of: [expectationStartEngine, expectationStopEngine], timeout: 5)
     }
