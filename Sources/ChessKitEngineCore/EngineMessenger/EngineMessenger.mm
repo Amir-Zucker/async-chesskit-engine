@@ -16,6 +16,7 @@ NSPipe *_writePipe;
 NSFileHandle *_pipeReadHandle;
 NSFileHandle *_pipeWriteHandle;
 NSLock *_lock;
+NSMutableString *_outputBuffer;
 
 /// Initializes a new `EngineMessenger` with default engine `Stockfish`.
 - (id)init {
@@ -27,6 +28,7 @@ NSLock *_lock;
     if (self) {
         signal(SIGPIPE, SIG_IGN);
         _lock = [[NSLock alloc] init];
+        _outputBuffer = [NSMutableString string];
         switch (type) {
             case EngineTypeStockfish:
                 _engine = new StockfishEngine();
@@ -98,7 +100,7 @@ NSLock *_lock;
         @try {
             [_pipeWriteHandle closeAndReturnError:nil];
         } @catch (NSException *exception) {
-            NSLog([exception description]);
+            NSLog(@"%@", [exception description]);
         }
     }
 
@@ -110,7 +112,7 @@ NSLock *_lock;
         @try {
             [_pipeReadHandle closeAndReturnError:nil];
         } @catch (NSException *exception) {
-            NSLog([exception description]);
+            NSLog(@"%@", [exception description]);
         }
     }
 
@@ -132,22 +134,36 @@ NSLock *_lock;
         
         if (fd < 0) { return; }
 
-        ssize_t result = write(fd, [data bytes], [data length]);
+        ssize_t result = write((int)fd, [data bytes], [data length]);
         (void)result;
     });
 }
 
 # pragma mark Private
-
-- (void)readStdout: (NSNotification*) notification {
+- (void)readStdout:(NSNotification*)notification {
     [_pipeReadHandle readInBackgroundAndNotify];
-
-    NSData *data = [[notification userInfo] objectForKey:NSFileHandleNotificationDataItem];
-    NSArray<NSString *> *output = [[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] componentsSeparatedByString:@"\n"];
-
-    [output enumerateObjectsUsingBlock:^(NSString * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-        [self responseHandler](obj);
-    }];
+    
+    NSData *data = notification.userInfo[NSFileHandleNotificationDataItem];
+    if (!data || data.length == 0) return;
+    
+    NSString *chunk = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    if (!chunk) return;
+    
+    [_outputBuffer appendString:chunk];
+    
+    NSArray<NSString *> *lines = [_outputBuffer componentsSeparatedByString:@"\n"];
+        
+    // Keep the last line in the buffer if it's incomplete
+    NSUInteger lastIndex = lines.count - 1;
+    for (NSUInteger i = 0; i < lastIndex; i++) {
+        NSString *line = lines[i];
+        if (line.length > 0) {
+            [self responseHandler](line);
+        }
+    }
+    
+    // Reset the buffer with the last (possibly partial) line
+    [_outputBuffer setString:lines[lastIndex]];
 }
 
 @end
