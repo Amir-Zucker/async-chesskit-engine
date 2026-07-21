@@ -91,7 +91,7 @@ public final class Engine: Sendable {
     public func start(
         coreCount: Int? = nil,
         multipv: Int = 1
-    ) async {
+    ) async throws {
         //Setup async stream response if not already set.
         await engineConfigurationActor.setAsyncStream()
         
@@ -99,7 +99,7 @@ public final class Engine: Sendable {
         messenger.start()
 
         // start engine setup loop
-        await send(command: .uci)
+        try await send(command: .uci)
     }
 
     /// Stops the engine.
@@ -109,11 +109,11 @@ public final class Engine: Sendable {
     /// sending any more commands with ``send(command:)``.
     ///
     /// - note: as temporary fix this function must be called before deiniting the engine.
-    public func stop() async {
+    public func stop() async throws {
         guard await isRunning == true else { return }
             
-        await send(command: .stop)
-        await send(command: .quit)
+        try await send(command: .stop)
+        try await send(command: .quit)
         messenger.stop()
             
             
@@ -130,10 +130,10 @@ public final class Engine: Sendable {
     /// validity.
     ///
     /// Any responses will be returned via ``responseStream``.
-    public func send(command: EngineCommand) async {
+    public func send(command: EngineCommand) async throws {
         guard await isRunning || [.uci, .isready].contains(command) else {
             await log("Engine is not running, call start() first.")
-            return
+            throw ChessKitEngineError.engineNotRunning
         }
 
         await log(command.rawValue)
@@ -183,38 +183,38 @@ public final class Engine: Sendable {
                     
                 if await !self.isRunning {
                     if parsed == .readyok {
-                        await self.performInitialSetup(
-                            coreCount: coreCount ?? ProcessInfo.processInfo.processorCount,
+                        try await self.performInitialSetup(
+                            coreCount: coreCount ?? (ProcessInfo.processInfo.activeProcessorCount - 1),
                             multipv: multipv
                         )
                     } else if let next = EngineCommand.nextSetupLoopCommand(
                         given: parsed
                     ) {
-                        await self.send(command: next)
+                        try await self.send(command: next)
                     }
                 }
-                await self.engineConfigurationActor.streamContinuation?.yield(parsed)
+                await self.engineConfigurationActor.sendValue(parsed)
             }
         }
     }
     
     /// Sets initial engine options.
-    private func performInitialSetup(coreCount: Int, multipv: Int) async {
+    private func performInitialSetup(coreCount: Int, multipv: Int) async throws {
         guard await !engineConfigurationActor.initialSetupComplete else { return }
         
         await engineConfigurationActor.setIsRunning(isRunning: true)
 
         // configure engine-specific options
         for command in type.setupCommands {
-            await send(command: command)
+            try await send(command: command)
         }
 
         // configure common engine options
-        await send(command: .setoption(
+        try await send(command: .setoption(
             id: "Threads",
             value: "\(max(coreCount - 1, 1))"
         ))
-        await send(command: .setoption(id: "MultiPV", value: "\(multipv)"))
+        try await send(command: .setoption(id: "MultiPV", value: "\(multipv)"))
 
         await engineConfigurationActor
             .setInitialSetupComplete(initialSetupComplete:  true)
@@ -271,11 +271,36 @@ fileprivate actor EngineConfiguration: Sendable {
     }
     
     func clearAsyncStream() async {
+        self.streamContinuation?.finish()
+        
         self.asyncStream = nil
         self.streamContinuation = nil
     }
     
     private func setStreamContinuation(_ continuation: AsyncStream<EngineResponse>.Continuation?) async {
         self.streamContinuation = continuation
+    }
+    
+    func sendValue(_ value: EngineResponse) async {
+        self.streamContinuation?.yield(value)
+    }
+}
+
+enum ChessKitEngineError: Error {
+    case unknown
+    case engineNotRunning
+    
+    var code: Int {
+        switch self {
+        case .unknown: return 2401
+        case .engineNotRunning: return 2402
+        }
+    }
+    
+    var localizedDescription: String {
+        switch self {
+        case .unknown: return "Unknown error"
+        case .engineNotRunning: return "Engine is not running, call start() first"
+        }
     }
 }
