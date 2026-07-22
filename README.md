@@ -13,7 +13,7 @@ A Swift package for the following chess engines:
             <a href="https://lczero.org"><img src="https://lczero.org/images/logo.svg" width="50" /></a>
         </td>
         <td valign="center">
-            <a href="https://arasanchess.org"><img src="https://www.arasanchess.org/arasan2.gif" width="50" /></a>
+            <a href="https://arasanchess.org/"><img src="https://arasanchess.org/arasan2.gif" width="50" /></a>
         </td>
     </tr>
 </table>
@@ -155,7 +155,7 @@ The following engines are currently supported:
 | :---: | --- | :---: | :---: | :---: |
 | <img src="https://stockfishchess.org/images/logo/icon_512x512.png" width="25" /> | [Stockfish](https://stockfishchess.org) | [17](https://github.com/official-stockfish/Stockfish/tree/sf_17) | [GPL v3](https://github.com/official-stockfish/Stockfish/blob/sf_17/Copying.txt) | [🔗](https://github.com/official-stockfish/Stockfish/wiki/UCI-&-Commands#setoption)
 | <img src="https://lczero.org/images/logo.svg" width="25" /> | [lc0](https://lczero.org) | [0.31.1](https://github.com/LeelaChessZero/lc0/tree/v0.31.1) | [GPL v3](https://github.com/LeelaChessZero/lc0/blob/v0.31.1/COPYING) | [🔗](https://github.com/LeelaChessZero/lc0/wiki/Lc0-options)
-| <img src="https://www.arasanchess.org/arasan2.gif" width="25" /> | [Arasan](https://www.arasanchess.org) | [25.0](https://github.com/Amir-Zucker/arasan-chess-monochrome) | [MIT License](https://github.com/Amir-Zucker/arasan-chess-monochrome/blob/master/LICENSE) | [🔗](https://github.com/Amir-Zucker/arasan-chess-monochrome?tab=readme-ov-file#uci-options)
+| <img src="https://arasanchess.org/arasan2.gif" width="25" /> | [Arasan](https://arasanchess.org/) | [25.0](https://github.com/Amir-Zucker/arasan-chess-monochrome) | [MIT License](https://github.com/Amir-Zucker/arasan-chess-monochrome/blob/master/LICENSE) | [🔗](https://github.com/Amir-Zucker/arasan-chess-monochrome?tab=readme-ov-file#uci-options)
 
 ## License
 
